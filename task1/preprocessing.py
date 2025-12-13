@@ -16,7 +16,7 @@ def load_and_preprocess_data(filepath):
     """
     Loads the dataset, performs cleaning, and prepares features/target.
     """
-    df = pd.read_csv(filepath)
+    df = pd.read_csv(r"C:\tasks\archive (3).zip")
     
     # Target variable
     target_col = 'price_in_USD'
