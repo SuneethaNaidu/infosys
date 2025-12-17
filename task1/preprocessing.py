@@ -1,78 +1,68 @@
+# ==============================
+# Weeks 1–2: Data Preparation & EDA
+# ==============================
+
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-def clean_area_column(column):
-    """Removes ' m²' and converts to float."""
-    if column.dtype == object:
-        return column.str.replace(' m²', '', regex=False).str.replace(',', '', regex=False).astype(float)
-    return column
+# 1. Load Dataset
+# Update the path if needed
+file_path = "C:\tasks\archive (3)\UCI_Real_Estate_Valuation.xlsx"
+df = pd.read_excel(file_path)
 
-def load_and_preprocess_data(filepath):
-    """
-    Loads the dataset, performs cleaning, and prepares features/target.
-    """
-    df = pd.read_csv(r"C:\tasks\archive (3).zip")
-    
-    # Target variable
-    target_col = 'price_in_USD'
-    
-    # Drop rows where target is missing
-    df = df.dropna(subset=[target_col])
-    
-    # Clean area columns
-    area_cols = ['apartment_total_area', 'apartment_living_area']
-    for col in area_cols:
-        if col in df.columns:
-            df[col] = clean_area_column(df[col])
-            
-    # Select relevant features
-    # Numerical features
-    numeric_features = [
-        'building_construction_year', 'building_total_floors', 
-        'apartment_floor', 'apartment_rooms', 'apartment_bedrooms', 
-        'apartment_bathrooms', 'apartment_total_area', 'apartment_living_area'
-    ]
-    
-    # Categorical features
-    categorical_features = ['country', 'location']
-    
-    # Filter features that exist in the dataframe
-    numeric_features = [f for f in numeric_features if f in df.columns]
-    categorical_features = [f for f in categorical_features if f in df.columns]
-    
-    X = df[numeric_features + categorical_features]
-    y = df[target_col]
-    
-    # Preprocessing pipelines
-    numeric_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='median')),
-        ('scaler', StandardScaler())
-    ])
+print("Dataset Shape:", df.shape)
+print(df.head())
 
-    categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
-        ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False)) # sparse_output=False for dense matrix if needed, or True for memory efficiency. XGBoost handles sparse.
-    ])
+# 2. Rename columns (optional but recommended for clarity)
+df.columns = [
+    "transaction_date",
+    "house_age",
+    "distance_to_mrt",
+    "num_convenience_stores",
+    "latitude",
+    "longitude",
+    "house_price"
+]
 
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', numeric_transformer, numeric_features),
-            ('cat', categorical_transformer, categorical_features)
-        ])
-    
-    return X, y, preprocessor
+# 3. Handle Missing Values
+print("\nMissing values before handling:\n", df.isnull().sum())
 
-if __name__ == "__main__":
-    # Test the loading function
-    try:
-        X, y, preprocessor = load_and_preprocess_data('../data/world_real_estate_data(147k).csv')
-        print("Data loaded successfully.")
-        print(f"Features shape: {X.shape}")
-        print(f"Target shape: {y.shape}")
-    except Exception as e:
-        print(f"Error loading data: {e}")
+df.fillna(df.median(numeric_only=True), inplace=True)
+
+print("\nMissing values after handling:\n", df.isnull().sum())
+
+# 4. Handle Outliers using IQR
+def remove_outliers(data, column):
+    Q1 = data[column].quantile(0.25)
+    Q3 = data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower = Q1 - 1.5 * IQR
+    upper = Q3 + 1.5 * IQR
+    return data[(data[column] >= lower) & (data[column] <= upper)]
+
+for col in df.select_dtypes(include=np.number).columns:
+    df = remove_outliers(df, col)
+
+print("\nDataset shape after outlier removal:", df.shape)
+
+# 5. Check Price Distribution (Balanced Price Ranges)
+plt.figure(figsize=(6,4))
+sns.histplot(df["house_price"], bins=30, kde=True)
+plt.title("House Price Distribution")
+plt.xlabel("House Price")
+plt.ylabel("Frequency")
+plt.show()
+
+# 6. Exploratory Data Analysis (EDA)
+# Correlation Matrix
+plt.figure(figsize=(8,6))
+sns.heatmap(df.corr(), annot=True, cmap="coolwarm")
+plt.title("Correlation Heatmap")
+plt.show()
+
+# Scatter plots
+sns.pairplot(df)
+plt.show()
+
