@@ -1,77 +1,51 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.pipeline import Pipeline
-import preprocessing
-import joblib
-import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+file_path = "C:/tasks/archive (3)/UCI_Real_Estate_Valuation.xlsx"  # Update path if needed
+df = pd.read_excel(file_path)
+print("Original Dataset Shape:", df.shape)
+print("\nOriginal Columns:\n", df.columns)
+if 'No' in df.columns:
+    df.drop(columns=['No'], inplace=True)
+df = df.rename(columns={
+    'X1 transaction date': 'transaction_date',
+    'X2 house age': 'house_age',
+    'X3 distance to the nearest MRT station': 'distance_to_mrt',
+    'X4 number of convenience stores': 'num_convenience_stores',
+    'X5 latitude': 'latitude',
+    'X6 longitude': 'longitude',
+    'Y house price of unit area': 'house_price'
+})
+print("\nRenamed Columns:\n", df.columns)
+print("Updated Dataset Shape:", df.shape)
+print("\nMissing Values Before Handling:\n", df.isnull().sum())
+df.fillna(df.median(numeric_only=True), inplace=True)
+print("\nMissing Values After Handling:\n", df.isnull().sum())
+def remove_outliers(data, column):
+    Q1 = data[column].quantile(0.25)
+    Q3 = data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    return data[(data[column] >= lower_bound) & (data[column] <= upper_bound)]
+numeric_cols = df.select_dtypes(include=np.number).columns
+for col in numeric_cols:
+    df = remove_outliers(df, col)
+print("\nDataset Shape After Outlier Removal:", df.shape)
+plt.figure(figsize=(6, 4))
+sns.histplot(df['house_price'], bins=30, kde=True)
+plt.title("House Price Distribution")
+plt.xlabel("House Price")
+plt.ylabel("Frequency")
+plt.show()
+plt.figure(figsize=(8, 6))
+sns.heatmap(df.corr(), annot=True, cmap="coolwarm")
+plt.title("Correlation Heatmap")
+plt.show()
+sns.pairplot(df)
+plt.show()
+print(df.describe())
 
-def train_and_evaluate(filepath):
-    """
-    Trains multiple models and evaluates their performance.
-    """
-    print(f"Loading data from {filepath}...")
-    X, y, preprocessor = preprocessing.load_and_preprocess_data(filepath)
 
-    # Split data (80-20)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
 
-    models = {
-        "Linear Regression": LinearRegression(),
-        "Decision Tree": DecisionTreeRegressor(random_state=42),
-        "Random Forest": RandomForestRegressor(n_estimators=100, random_state=42),
-        "XGBoost": XGBRegressor(
-            n_estimators=100,
-            random_state=42,
-            objective="reg:squarederror"
-        )
-    }
-
-    results = {}
-
-    print("\nTraining models...")
-    for name, model in models.items():
-        print(f"Training {name}...")
-
-        # Pipeline: preprocessing + model
-        clf = Pipeline(steps=[
-            ('preprocessor', preprocessor),
-            ('model', model)
-        ])
-
-        clf.fit(X_train, y_train)
-
-        y_pred = clf.predict(X_test)
-
-        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-        mae = mean_absolute_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-
-        results[name] = {
-            "RMSE": rmse,
-            "MAE": mae,
-            "R2": r2
-        }
-
-        # Save models
-        model_dir = "../models"
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir)
-
-        model_filename = f"{model_dir}/{name.replace(' ', '_').lower()}_model.pkl"
-        joblib.dump(clf, model_filename)
-
-    print("\n📊 Model Evaluation Results:")
-    results_df = pd.DataFrame(results).T
-    print(results_df)
-
-if __name__ == "__main__":
-    dataset_path = r"C:\tasks\archive (3).zip"   # ✅ PATH REPLACED
-    train_and_evaluate(dataset_path)
