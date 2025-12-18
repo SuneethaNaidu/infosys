@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-file_path = "C:/tasks/archive (3)/UCI_Real_Estate_Valuation.xlsx"  # Update path if needed
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from xgboost import XGBRegressor
+file_path ="C:/tasks/archive (3)/UCI_Real_Estate_Valuation.xlsx"
 df = pd.read_excel(file_path)
-print("Original Dataset Shape:", df.shape)
-print("\nOriginal Columns:\n", df.columns)
 if 'No' in df.columns:
     df.drop(columns=['No'], inplace=True)
 df = df.rename(columns={
@@ -17,35 +19,64 @@ df = df.rename(columns={
     'X6 longitude': 'longitude',
     'Y house price of unit area': 'house_price'
 })
-print("\nRenamed Columns:\n", df.columns)
-print("Updated Dataset Shape:", df.shape)
-print("\nMissing Values Before Handling:\n", df.isnull().sum())
-df.fillna(df.median(numeric_only=True), inplace=True)
-print("\nMissing Values After Handling:\n", df.isnull().sum())
-def remove_outliers(data, column):
-    Q1 = data[column].quantile(0.25)
-    Q3 = data[column].quantile(0.75)
-    IQR = Q3 - Q1
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
-    return data[(data[column] >= lower_bound) & (data[column] <= upper_bound)]
-numeric_cols = df.select_dtypes(include=np.number).columns
-for col in numeric_cols:
-    df = remove_outliers(df, col)
-print("\nDataset Shape After Outlier Removal:", df.shape)
-plt.figure(figsize=(6, 4))
-sns.histplot(df['house_price'], bins=30, kde=True)
-plt.title("House Price Distribution")
-plt.xlabel("House Price")
-plt.ylabel("Frequency")
-plt.show()
-plt.figure(figsize=(8, 6))
-sns.heatmap(df.corr(), annot=True, cmap="coolwarm")
-plt.title("Correlation Heatmap")
-plt.show()
-sns.pairplot(df)
-plt.show()
-print(df.describe())
+X = df.drop('house_price', axis=1)
+y = df['house_price']
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+print("Training set size:", X_train.shape)
+print("Testing set size:", X_test.shape)
+models = {
+    "Linear Regression": LinearRegression(),
+    "Decision Tree": DecisionTreeRegressor(random_state=42),
+    "Random Forest": RandomForestRegressor(
+        n_estimators=100, random_state=42
+    ),
+    "XGBoost": XGBRegressor(
+        n_estimators=100,
+        learning_rate=0.1,
+        max_depth=5,
+        random_state=42,
+        objective="reg:squarederror"
+    )
+}
+results = []
+for model_name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    results.append([model_name, rmse, mae, r2])
+results_df = pd.DataFrame(
+    results, columns=["Model", "RMSE", "MAE", "R² Score"]
+)
+print("\nModel Performance Comparison:\n")
+print(results_df)
+param_grid = {
+    'n_estimators': [100, 200],
+    'max_depth': [None, 10, 20],
+    'min_samples_split': [2, 5]
+}
+rf_model = RandomForestRegressor(random_state=42)
+grid_search = GridSearchCV(
+    rf_model,
+    param_grid,
+    cv=5,
+    scoring='r2',
+    n_jobs=-1
+)
+grid_search.fit(X_train, y_train)
+best_rf = grid_search.best_estimator_
+print("\nBest Random Forest Parameters:")
+print(grid_search.best_params_)
+y_pred_best = best_rf.predict(X_test)
+print("\nOptimized Random Forest Performance:")
+print("RMSE:", np.sqrt(mean_squared_error(y_test, y_pred_best)))
+print("MAE :", mean_absolute_error(y_test, y_pred_best))
+print("R²  :", r2_score(y_test, y_pred_best))
+
+
 
 
 
