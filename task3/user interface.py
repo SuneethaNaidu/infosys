@@ -2,90 +2,101 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
+import os
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
 
-# ---------------------------
-# Load model & data
-# ---------------------------
-model = joblib.load("house_price_model.pkl")
-data = pd.read_excel("C:/tasks/archive (3)/UCI_Real_Estate_Valuation.xlsx")
+# --------------------------------------------------
+# DATASET PATH (PLACED AS YOU REQUESTED)
+# --------------------------------------------------
+DATASET_PATH = r"C:/tasks/archive (3)/UCI_Real_Estate_Valuation.xlsx"
 
-# ---------------------------
-# App title
-# ---------------------------
-st.set_page_config(page_title="House Price Prediction", layout="wide")
-st.title("🏠 House Price Prediction System")
+# --------------------------------------------------
+# MODEL PATH (same folder as this file)
+# --------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "house_price_model.pkl")
 
-st.markdown("Enter house details to predict the **estimated price** and explore market insights.")
+# --------------------------------------------------
+# LOAD DATA
+# --------------------------------------------------
+@st.cache_data
+def load_data():
+    df = pd.read_excel(DATASET_PATH)
+    return df
 
-# ---------------------------
-# Sidebar – User Inputs
-# ---------------------------
-st.sidebar.header("🔧 House Features")
+# --------------------------------------------------
+# TRAIN MODEL (only if model not already saved)
+# --------------------------------------------------
+def train_and_save_model(df):
+    # Dataset columns (UCI Real Estate)
+    X = df[[
+        "X1 transaction date",
+        "X2 house age",
+        "X3 distance to the nearest MRT station",
+        "X4 number of convenience stores",
+        "X5 latitude",
+        "X6 longitude"
+    ]]
+    y = df["Y house price of unit area"]
 
-area = st.sidebar.number_input("Area (sq.ft)", 500, 5000, 1200)
-bedrooms = st.sidebar.slider("Bedrooms", 1, 6, 3)
-bathrooms = st.sidebar.slider("Bathrooms", 1, 4, 2)
-stories = st.sidebar.slider("Stories", 1, 4, 1)
-parking = st.sidebar.slider("Parking Spaces", 0, 3, 1)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
 
-# Convert inputs to DataFrame
-input_data = pd.DataFrame([[area, bedrooms, bathrooms, stories, parking]],
-                          columns=["area", "bedrooms", "bathrooms", "stories", "parking"])
+    model = LinearRegression()
+    model.fit(X_train, y_train)
 
-# ---------------------------
-# Prediction
-# ---------------------------
-if st.sidebar.button("🔮 Predict Price"):
-    prediction = model.predict(input_data)[0]
-    st.success(f"💰 Estimated House Price: ₹ {prediction:,.2f}")
+    joblib.dump(model, MODEL_PATH)
+    return model
 
-# ---------------------------
-# Layout for visualizations
-# ---------------------------
-col1, col2 = st.columns(2)
+# --------------------------------------------------
+# LOAD OR TRAIN MODEL
+# --------------------------------------------------
+try:
+    model = joblib.load(MODEL_PATH)
+except FileNotFoundError:
+    df = load_data()
+    model = train_and_save_model(df)
 
-# ---------------------------
-# Price Distribution
-# ---------------------------
-with col1:
-    st.subheader("📊 Price Distribution")
-    fig, ax = plt.subplots()
-    sns.histplot(data["price"], bins=30, kde=True, ax=ax)
-    ax.set_xlabel("House Price")
-    ax.set_ylabel("Count")
-    st.pyplot(fig)
+# --------------------------------------------------
+# STREAMLIT UI
+# --------------------------------------------------
+st.set_page_config(page_title="House Price Prediction", layout="centered")
 
-# ---------------------------
-# Market Trend (Area vs Price)
-# ---------------------------
-with col2:
-    st.subheader("📈 Market Trend (Area vs Price)")
-    fig, ax = plt.subplots()
-    sns.scatterplot(x=data["area"], y=data["price"], ax=ax)
-    ax.set_xlabel("Area (sq.ft)")
-    ax.set_ylabel("Price")
-    st.pyplot(fig)
+st.title("🏠 Real Estate Price Prediction")
+st.write("Predict house price using UCI Real Estate dataset")
 
-# ---------------------------
-# Feature Importance
-# ---------------------------
-st.subheader("⭐ Feature Importance")
+# --------------------------------------------------
+# USER INPUTS
+# --------------------------------------------------
+transaction_date = st.number_input("Transaction Date (e.g. 2013.5)", value=2013.5)
+house_age = st.number_input("House Age (years)", min_value=0.0, value=10.0)
+distance_mrt = st.number_input("Distance to MRT (meters)", min_value=0.0, value=500.0)
+stores = st.number_input("Number of Convenience Stores", min_value=0, value=5)
+latitude = st.number_input("Latitude", value=24.98)
+longitude = st.number_input("Longitude", value=121.54)
 
-if hasattr(model, "feature_importances_"):
-    importance = model.feature_importances_
-    features = input_data.columns
+# --------------------------------------------------
+# PREDICTION
+# --------------------------------------------------
+if st.button("Predict House Price"):
+    input_data = np.array([[
+        transaction_date,
+        house_age,
+        distance_mrt,
+        stores,
+        latitude,
+        longitude
+    ]])
 
-    fig, ax = plt.subplots()
-    sns.barplot(x=importance, y=features, ax=ax)
-    ax.set_title("Feature Importance")
-    st.pyplot(fig)
-else:
-    st.info("Feature importance not available for this model.")
+    prediction = model.predict(input_data)
 
-# ---------------------------
-# Footer
-# ---------------------------
+    st.success(f"💰 Predicted House Price (per unit area): {prediction[0]:.2f}")
+
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
 st.markdown("---")
-st.markdown("📌 **Note:** This prediction is based on historical data and machine learning models.")
+st.markdown("✅ **Task 3 – Real Estate Price Prediction using Machine Learning & Streamlit**")
+
