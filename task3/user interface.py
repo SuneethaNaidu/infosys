@@ -1,102 +1,182 @@
-import streamlit as st
+\import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
-import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
 
-# --------------------------------------------------
-# DATASET PATH (PLACED AS YOU REQUESTED)
-# --------------------------------------------------
-DATASET_PATH = r"C:/tasks/archive (3)/UCI_Real_Estate_Valuation.xlsx"
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
+st.set_page_config(
+    page_title="House Price Prediction App",
+    layout="wide"
+)
 
-# --------------------------------------------------
-# MODEL PATH (same folder as this file)
-# --------------------------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "house_price_model.pkl")
+st.title("🏠 House Price Prediction & Market Analysis")
 
-# --------------------------------------------------
+# -----------------------------
 # LOAD DATA
-# --------------------------------------------------
+# -----------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_excel(DATASET_PATH)
+    file_path = "C:/tasks/archive (3)/UCI_Real_Estate_Valuation.xlsx" 
+    df = pd.read_excel(file_path)
+
+    if 'No' in df.columns:
+        df.drop(columns=['No'], inplace=True)
+
+    df = df.rename(columns={
+        'X1 transaction date': 'transaction_date',
+        'X2 house age': 'house_age',
+        'X3 distance to the nearest MRT station': 'distance_to_mrt',
+        'X4 number of convenience stores': 'num_convenience_stores',
+        'X5 latitude': 'latitude',
+        'X6 longitude': 'longitude',
+        'Y house price of unit area': 'house_price'
+    })
+
+    df.fillna(df.median(numeric_only=True), inplace=True)
     return df
 
-# --------------------------------------------------
-# TRAIN MODEL (only if model not already saved)
-# --------------------------------------------------
-def train_and_save_model(df):
-    # Dataset columns (UCI Real Estate)
-    X = df[[
-        "X1 transaction date",
-        "X2 house age",
-        "X3 distance to the nearest MRT station",
-        "X4 number of convenience stores",
-        "X5 latitude",
-        "X6 longitude"
-    ]]
-    y = df["Y house price of unit area"]
+df = load_data()
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+# -----------------------------
+# MODEL TRAINING
+# -----------------------------
+X = df.drop("house_price", axis=1)
+y = df["house_price"]
 
-    model = LinearRegression()
-    model.fit(X_train, y_train)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-    joblib.dump(model, MODEL_PATH)
-    return model
+model = RandomForestRegressor(
+    n_estimators=200,
+    random_state=42
+)
+model.fit(X_train, y_train)
 
-# --------------------------------------------------
-# LOAD OR TRAIN MODEL
-# --------------------------------------------------
-try:
-    model = joblib.load(MODEL_PATH)
-except FileNotFoundError:
-    df = load_data()
-    model = train_and_save_model(df)
+# -----------------------------
+# SIDEBAR - USER INPUT
+# -----------------------------
+st.sidebar.header("📋 Enter House Details")
 
-# --------------------------------------------------
-# STREAMLIT UI
-# --------------------------------------------------
-st.set_page_config(page_title="House Price Prediction", layout="centered")
+transaction_date = st.sidebar.slider(
+    "Transaction Date",
+    float(df.transaction_date.min()),
+    float(df.transaction_date.max()),
+    float(df.transaction_date.mean())
+)
 
-st.title("🏠 Real Estate Price Prediction")
-st.write("Predict house price using UCI Real Estate dataset")
+house_age = st.sidebar.slider(
+    "House Age (years)",
+    0.0, 50.0, 20.0
+)
 
-# --------------------------------------------------
-# USER INPUTS
-# --------------------------------------------------
-transaction_date = st.number_input("Transaction Date (e.g. 2013.5)", value=2013.5)
-house_age = st.number_input("House Age (years)", min_value=0.0, value=10.0)
-distance_mrt = st.number_input("Distance to MRT (meters)", min_value=0.0, value=500.0)
-stores = st.number_input("Number of Convenience Stores", min_value=0, value=5)
-latitude = st.number_input("Latitude", value=24.98)
-longitude = st.number_input("Longitude", value=121.54)
+distance_to_mrt = st.sidebar.slider(
+    "Distance to MRT (meters)",
+    0.0, 6500.0, 1000.0
+)
 
-# --------------------------------------------------
+num_convenience_stores = st.sidebar.slider(
+    "Number of Convenience Stores",
+    0, 10, 5
+)
+
+latitude = st.sidebar.slider(
+    "Latitude",
+    float(df.latitude.min()),
+    float(df.latitude.max()),
+    float(df.latitude.mean())
+)
+
+longitude = st.sidebar.slider(
+    "Longitude",
+    float(df.longitude.min()),
+    float(df.longitude.max()),
+    float(df.longitude.mean())
+)
+
+# -----------------------------
 # PREDICTION
-# --------------------------------------------------
-if st.button("Predict House Price"):
-    input_data = np.array([[
-        transaction_date,
-        house_age,
-        distance_mrt,
-        stores,
-        latitude,
-        longitude
-    ]])
+# -----------------------------
+input_data = pd.DataFrame([[
+    transaction_date,
+    house_age,
+    distance_to_mrt,
+    num_convenience_stores,
+    latitude,
+    longitude
+]], columns=X.columns)
 
-    prediction = model.predict(input_data)
+prediction = model.predict(input_data)[0]
 
-    st.success(f"💰 Predicted House Price (per unit area): {prediction[0]:.2f}")
+st.subheader("💰 Predicted House Price")
+st.success(f"Estimated Price per Unit Area: **{prediction:.2f}**")
 
-# --------------------------------------------------
-# FOOTER
-# --------------------------------------------------
+# -----------------------------
+# VISUALIZATIONS
+# -----------------------------
 st.markdown("---")
-st.markdown("✅ **Task 3 – Real Estate Price Prediction using Machine Learning & Streamlit**")
+st.subheader("📊 Data Insights & Visualizations")
 
+col1, col2 = st.columns(2)
+
+# ---- Price Distribution
+with col1:
+    st.markdown("### House Price Distribution")
+    fig1, ax1 = plt.subplots()
+    sns.histplot(df["house_price"], bins=30, kde=True, ax=ax1)
+    ax1.set_xlabel("House Price")
+    ax1.set_ylabel("Frequency")
+    st.pyplot(fig1)
+
+# ---- Feature Importance
+with col2:
+    st.markdown("### Feature Importance")
+    importance = model.feature_importances_
+    feature_df = pd.DataFrame({
+        "Feature": X.columns,
+        "Importance": importance
+    }).sort_values(by="Importance", ascending=False)
+
+    fig2, ax2 = plt.subplots()
+    sns.barplot(
+        data=feature_df,
+        x="Importance",
+        y="Feature",
+        ax=ax2
+    )
+    st.pyplot(fig2)
+
+# -----------------------------
+# MARKET TRENDS
+# -----------------------------
+st.markdown("---")
+st.subheader("📈 Market Trend Analysis")
+
+fig3, ax3 = plt.subplots()
+sns.scatterplot(
+    data=df,
+    x="house_age",
+    y="house_price",
+    ax=ax3
+)
+ax3.set_xlabel("House Age (Years)")
+ax3.set_ylabel("House Price")
+ax3.set_title("House Price vs House Age")
+st.pyplot(fig3)
+
+# -----------------------------
+# FOOTER
+# -----------------------------
+st.markdown(
+    """
+    ---
+    ✅ **Model Used:** Random Forest Regressor  
+    📊 **Dataset:** UCI Real Estate Valuation  
+    🚀 Built with Streamlit
+    """
+)
